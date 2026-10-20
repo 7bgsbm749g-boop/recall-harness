@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -413,7 +414,11 @@ func TestSyncDirectoryFileReportsClosedHandle(t *testing.T) {
 	if !errors.Is(err, os.ErrClosed) {
 		t.Fatalf("error = %v, want os.ErrClosed", err)
 	}
-	for _, want := range []string{"sync session store directory", "close session store directory"} {
+	wants := []string{"close session store directory"}
+	if runtime.GOOS != "windows" {
+		wants = append(wants, "sync session store directory")
+	}
+	for _, want := range wants {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error = %q, want %q", err, want)
 		}
