@@ -3,6 +3,7 @@
 import base64
 import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 
@@ -32,6 +33,10 @@ def main():
     if not binary.is_file():
         raise ValueError("The installed Recall binary is missing")
     arguments = command(payload, binary)
+    if os.name == "nt":
+        # Windows has no process-image replacement. Keep the SSH-owned parent
+        # alive until the binary finishes, including all piped binary output.
+        sys.exit(subprocess.call(arguments))
     os.execv(str(binary), arguments)
 
 
