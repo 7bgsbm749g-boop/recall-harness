@@ -19,6 +19,33 @@ def ps_quote(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
+def stop_windows_task(name):
+    task = ps_quote(name)
+    return (
+        f"if(Get-ScheduledTask -TaskName {task} -ErrorAction SilentlyContinue){{"
+        f"Stop-ScheduledTask -TaskName {task};"
+        "$recallStopUntil=(Get-Date).AddSeconds(15);"
+        "do{Start-Sleep -Milliseconds 250;"
+        f"$recallStopping=Get-ScheduledTask -TaskName {task};"
+        "}while($recallStopping.State -in @('Running','Queued') -and (Get-Date) -lt $recallStopUntil);"
+        "if($recallStopping.State -in @('Running','Queued')){throw 'Recall task did not stop before update'};"
+        "};"
+    )
+
+
+def start_windows_task(name):
+    task = ps_quote(name)
+    return (
+        f"Start-ScheduledTask -TaskName {task};"
+        "$recallStartUntil=(Get-Date).AddSeconds(15);"
+        "do{Start-Sleep -Milliseconds 250;"
+        f"$recallStarting=Get-ScheduledTask -TaskName {task};"
+        "}while($recallStarting.State -ne 'Running' -and (Get-Date) -lt $recallStartUntil);"
+        "if($recallStarting.State -ne 'Running'){throw 'Recall task did not remain running; inspect Task Scheduler'};"
+        "$recallStarting | Select-Object TaskName,State | ConvertTo-Json -Compress"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
@@ -81,11 +108,10 @@ def main():
                 + " -Argument 'memory worker --interval 20s';"
                 "$trigger=New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME;"
                 "$principal=New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited;"
-                "$settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero);"
-                "if(Get-ScheduledTask -TaskName RecallMemory -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName RecallMemory};"
+                "$settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1);"
+                + stop_windows_task("RecallMemory") +
                 "Register-ScheduledTask -TaskName RecallMemory -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null;"
-                "Start-ScheduledTask -TaskName RecallMemory;"
-                "Get-ScheduledTask -TaskName RecallMemory | Select-Object TaskName,State | ConvertTo-Json -Compress"
+                + start_windows_task("RecallMemory")
             )
             run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script])
         else:
@@ -112,11 +138,10 @@ def main():
                 + " -Argument " + ps_quote(subprocess.list2cmdline(arguments)) + ";"
                 "$trigger=New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME;"
                 "$principal=New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited;"
-                "$settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero);"
-                "if(Get-ScheduledTask -TaskName RecallMemorySync -ErrorAction SilentlyContinue){Stop-ScheduledTask -TaskName RecallMemorySync};"
+                "$settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1);"
+                + stop_windows_task("RecallMemorySync") +
                 "Register-ScheduledTask -TaskName RecallMemorySync -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null;"
-                "Start-ScheduledTask -TaskName RecallMemorySync;"
-                "Get-ScheduledTask -TaskName RecallMemorySync | Select-Object TaskName,State | ConvertTo-Json -Compress"
+                + start_windows_task("RecallMemorySync")
             )
             run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script])
         else:
