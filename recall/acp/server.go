@@ -18,7 +18,7 @@ import (
 	"github.com/unreallabsai/unreal-agent/recall/memory"
 )
 
-const Version = "0.1.0"
+const Version = "0.1.1"
 
 type Config struct {
 	DataDirectory string
@@ -247,7 +247,7 @@ func (s *Server) handle(method string, raw json.RawMessage) (any, *rpcError) {
 		s.mu.Lock()
 		s.initialized = true
 		s.mu.Unlock()
-		return map[string]any{"protocolVersion": 1, "agentInfo": map[string]string{"name": "Recall", "title": "Recall harness", "version": Version}, "agentCapabilities": map[string]any{"loadSession": true, "sessionCapabilities": map[string]any{"list": map[string]any{}, "resume": map[string]any{}, "close": map[string]any{}}, "promptCapabilities": map[string]any{"embeddedContext": true}, "mcpCapabilities": map[string]bool{"http": true}}, "authMethods": []any{}}, nil
+		return map[string]any{"protocolVersion": 1, "agentInfo": map[string]string{"name": "Recall", "title": "Recall harness", "version": Version}, "agentCapabilities": map[string]any{"loadSession": true, "sessionCapabilities": map[string]any{"list": map[string]any{}, "resume": map[string]any{}, "close": map[string]any{}}, "promptCapabilities": map[string]any{"embeddedContext": true, "image": true}, "mcpCapabilities": map[string]bool{"http": true}}, "authMethods": []any{}}, nil
 	}
 	s.mu.Lock()
 	initialized := s.initialized

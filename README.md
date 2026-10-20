@@ -85,8 +85,13 @@ Runtime limits can be set with `RECALL_SCAN_TOKENS`, `RECALL_COMPACT_TOKENS`,
 Recall reads existing fleet and workspace `AGENTS.md` instructions and discovers global
 and workspace skills. Memory does not remove those instructions. Project memory starts
 with conversations run through Recall; existing T3 conversations remain available through
-T3's history tools. Prompt text and embedded text resources are supported. Image and audio
-prompt capabilities are not advertised in this release; unsupported input is rejected.
+T3's history tools. Prompt text, embedded text resources, and image prompts are supported.
+Images use native model input parts and survive session restore, compaction, and fleet sync.
+PNG, JPEG, GIF, and WebP inputs are limited to 10 MiB per image, 20 MiB and eight images
+per prompt, and 32 megapixels per image. Memory keeps the original bytes; summaries and
+search results contain compact metadata. `memory_read` restores a local evidence file for
+`ViewImage` when an archived image needs inspection. Pixel allowances replace base64 prose
+counts in the context estimate. Audio prompts remain unsupported.
 
 Summaries and retrieved facts still need interpretation. Source integrity establishes what
 was recorded. It does not establish that a recorded claim was correct or remains current.
@@ -113,6 +118,7 @@ go test ./...
 go test -race ./recall/...
 python3 -m unittest discover -s scripts -p 'test_*.py'
 python3 scripts/smoke-acp.py --binary dist/recall --evidence /tmp/recall-evidence
+python3 scripts/smoke-images.py --binary dist/recall --image /tmp/probe.png --expected IMAGE_CODE --evidence /tmp/recall-evidence
 ```
 
 The live smoke uses a separate synthetic workspace. It checks prepared compaction, a user

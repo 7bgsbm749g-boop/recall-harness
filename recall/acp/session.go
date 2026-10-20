@@ -30,6 +30,7 @@ import (
 	"github.com/unreallabsai/unreal-agent/harness/tool"
 	"github.com/unreallabsai/unreal-agent/harness/tool/bash"
 	"github.com/unreallabsai/unreal-agent/harness/tool/viewimage"
+	"github.com/unreallabsai/unreal-agent/recall/media"
 	"github.com/unreallabsai/unreal-agent/recall/memory"
 )
 
@@ -301,11 +302,15 @@ func (s *Session) prompt(raw json.RawMessage) (any, error) {
 		return nil, err
 	}
 	var text strings.Builder
+	var images []string
+	imageBytes := 0
 	for _, rawBlock := range p.Prompt {
 		var block struct {
 			Type     string `json:"type"`
 			Text     string `json:"text"`
 			URI      string `json:"uri"`
+			Data     string `json:"data"`
+			MimeType string `json:"mimeType"`
 			Resource struct {
 				Text string `json:"text"`
 				URI  string `json:"uri"`
@@ -321,12 +326,22 @@ func (s *Session) prompt(raw json.RawMessage) (any, error) {
 			fmt.Fprintf(&text, "\nResource %s:\n%s\n", block.Resource.URI, block.Resource.Text)
 		case "resource_link":
 			fmt.Fprintf(&text, "\nReferenced resource: %s\n", block.URI)
+		case "image":
+			url, size, err := media.Inline(block.Data, block.MimeType)
+			if err != nil {
+				return nil, err
+			}
+			imageBytes += size
+			if len(images) >= media.MaxImages || imageBytes > media.MaxPromptBytes {
+				return nil, errors.New("Recall accepts at most 8 images and 20 MiB of image data per prompt")
+			}
+			images = append(images, url)
 		default:
 			return nil, fmt.Errorf("Recall does not support prompt content type %q", block.Type)
 		}
 		text.WriteString("\n")
 	}
-	if strings.TrimSpace(text.String()) == "" {
+	if strings.TrimSpace(text.String()) == "" && len(images) == 0 {
 		return nil, errors.New("empty Recall prompt")
 	}
 	store, err := localfile.New(filepath.Join(s.directory, "history"))
@@ -391,6 +406,12 @@ func (s *Session) prompt(raw json.RawMessage) (any, error) {
 		return nil, err
 	}
 	payload, _ := jsonv2.Marshal(strings.TrimSpace(text.String()))
+	if len(images) > 0 {
+		payload, err = jsonv2.Marshal(inbox.ExternalMessage{Text: strings.TrimSpace(text.String()), Media: &llm.MessageMedia{Images: images}})
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err := inputs.Submit(ctx, inbox.Input{ID: inbox.ID(uuid.New().String()), Kind: inbox.InputExternal, Payload: payload}); err != nil {
 		return nil, err
 	}
@@ -480,10 +501,22 @@ func (s *Session) replay() error {
 			if item.Kind == sessionstore.ItemInput {
 				input := item.Data.(inbox.Input)
 				if input.Kind == inbox.InputExternal {
-					var text string
-					if jsonv2.Unmarshal(input.Payload, &text) == nil {
-						if err := s.server.notify(s.meta.ID, map[string]any{"sessionUpdate": "user_message_chunk", "content": map[string]string{"type": "text", "text": text}}); err != nil {
+					message, err := input.DecodeExternalMessage()
+					if err != nil {
+						return err
+					}
+					if message.Text != "" {
+						if err := s.server.notify(s.meta.ID, map[string]any{"sessionUpdate": "user_message_chunk", "content": map[string]string{"type": "text", "text": message.Text}}); err != nil {
 							return err
+						}
+					}
+					if message.Media != nil {
+						for _, url := range message.Media.Images {
+							header, data, _ := strings.Cut(url, ",")
+							mime := strings.TrimSuffix(strings.TrimPrefix(header, "data:"), ";base64")
+							if err := s.server.notify(s.meta.ID, map[string]any{"sessionUpdate": "user_message_chunk", "content": map[string]string{"type": "image", "data": data, "mimeType": mime}}); err != nil {
+								return err
+							}
 						}
 					}
 				}
@@ -571,6 +604,28 @@ func (s *Session) tools(ctx context.Context) (*registry, []*MCPClient, error) {
 		if err != nil {
 			return nil, err
 		}
+		var images []map[string]any
+		projection := false
+		if strings.Contains(p.Reference, "/event/") {
+			event, err := s.engine.Store.ReadEvent(p.Reference)
+			if err != nil {
+				return nil, err
+			}
+			if event.Item.Type == llm.ItemMessage {
+				message := event.Item.Data.(llm.Message)
+				if message.Media != nil && len(message.Media.Images) > 0 {
+					images, err = s.imageEvidence(message.Media)
+					if err != nil {
+						return nil, err
+					}
+					data, err = json.Marshal(map[string]any{"thread": event.Thread, "ordinal": event.Ordinal, "time": event.Time, "role": message.Role, "text": message.Text, "images": images})
+					if err != nil {
+						return nil, err
+					}
+					projection = true
+				}
+			}
+		}
 		if p.Offset < 0 || p.Offset > len(data) {
 			return nil, errors.New("invalid memory offset")
 		}
@@ -578,7 +633,7 @@ func (s *Session) tools(ctx context.Context) (*registry, []*MCPClient, error) {
 			p.Length = 16000
 		}
 		end := min(len(data), p.Offset+p.Length)
-		return map[string]any{"reference": p.Reference, "text": string(data[p.Offset:end]), "total_bytes": len(data), "next_offset": end, "complete": end == len(data)}, nil
+		return map[string]any{"reference": p.Reference, "text": string(data[p.Offset:end]), "total_bytes": len(data), "next_offset": end, "complete": end == len(data), "image_projection": projection, "images": images}, nil
 	})
 	skillDirectories := []string{}
 	if home, err := os.UserHomeDir(); err == nil {

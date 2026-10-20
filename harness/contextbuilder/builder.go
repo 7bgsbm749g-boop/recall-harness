@@ -2,7 +2,6 @@ package contextbuilder
 
 import (
 	_ "embed"
-	"encoding/json/v2"
 	"fmt"
 	"slices"
 	"strings"
@@ -59,13 +58,13 @@ func (current *builder) AddExternalInput(input inbox.Input) error {
 		)
 	}
 
-	var text string
-	if err := json.Unmarshal(input.Payload, &text); err != nil {
-		return fmt.Errorf("decode external input %q: %w", input.ID, err)
+	message, err := input.DecodeExternalMessage()
+	if err != nil {
+		return err
 	}
 	current.stageItems(llm.Item{
 		Type: llm.ItemMessage,
-		Data: llm.Message{Role: llm.RoleUser, Text: text},
+		Data: message,
 	})
 	return nil
 }

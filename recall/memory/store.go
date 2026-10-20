@@ -18,6 +18,7 @@ import (
 
 	"github.com/gofrs/flock"
 	"github.com/unreallabsai/unreal-agent/harness/llm"
+	"github.com/unreallabsai/unreal-agent/recall/media"
 )
 
 const SchemaVersion = 1
@@ -262,7 +263,19 @@ func (s *Store) put(kind string, v any) (string, error) {
 func ItemText(item llm.Item) string {
 	switch item.Type {
 	case llm.ItemMessage:
-		return item.Data.(llm.Message).Text
+		message := item.Data.(llm.Message)
+		text := message.Text
+		if message.Media != nil {
+			for index, url := range message.Media.Images {
+				_, mime, config, err := media.Decode(url)
+				if err == nil {
+					text += fmt.Sprintf("\n[Image attachment %d: %s, %dx%d. Use memory_read on this event, then ViewImage on its image evidence path.]", index, mime, config.Width, config.Height)
+				} else {
+					text += "\n[Image attachment; use the original event for evidence.]"
+				}
+			}
+		}
+		return text
 	case llm.ItemToolCall:
 		c := item.Data.(llm.ToolCall)
 		return c.Name + " " + c.Arguments

@@ -14,8 +14,19 @@ const legacyItemReasoning ItemType = "reasoning"
 func (item Item) Validate() error {
 	switch item.Type {
 	case ItemMessage:
-		if _, ok := item.Data.(Message); !ok {
+		message, ok := item.Data.(Message)
+		if !ok {
 			return fmt.Errorf("message data must be llm.Message, got %T", item.Data)
+		}
+		if message.Media != nil {
+			if message.Role != RoleUser {
+				return fmt.Errorf("image attachments require a user message")
+			}
+			for _, image := range message.Media.Images {
+				if strings.TrimSpace(image) == "" {
+					return fmt.Errorf("image URL must not be empty")
+				}
+			}
 		}
 	case ItemToolCall:
 		if _, ok := item.Data.(ToolCall); !ok {

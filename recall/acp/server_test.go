@@ -275,15 +275,15 @@ func TestACPCancelInterruptsPendingModelAndKeepsServerUsable(t *testing.T) {
 	}
 }
 
-func TestACPRejectsUnadvertisedPromptTypes(t *testing.T) {
+func TestACPRejectsUnadvertisedAudio(t *testing.T) {
 	p := startPeer(t, t.TempDir(), fakeAdapter(func(context.Context, llm.Request, llm.RequestOptions) (llm.Response, error) {
 		t.Error("unsupported input reached model")
 		return assistant("wrong"), nil
 	}), true)
 	p.initialize()
 	id := p.newSession(t.TempDir())
-	if _, err := p.request("session/prompt", map[string]any{"sessionId": id, "prompt": []any{map[string]string{"type": "image", "data": "base64", "mimeType": "image/png"}}}); err == nil {
-		t.Fatal("unsupported image input was silently accepted")
+	if _, err := p.request("session/prompt", map[string]any{"sessionId": id, "prompt": []any{map[string]string{"type": "audio", "data": "base64", "mimeType": "audio/wav"}}}); err == nil {
+		t.Fatal("unsupported audio input was silently accepted")
 	}
 }
 

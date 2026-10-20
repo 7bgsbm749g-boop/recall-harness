@@ -78,5 +78,11 @@ skips completed exchanges; a concurrent append forces another pass. Project view
 rebuilt locally. Login files, tool receipts, and approvals are outside the transfer format.
 
 Sync is eventual, and offline hosts keep their local data. Legacy T3 history is accessible
-through T3 tools but is not automatically backfilled into Recall's archive. Image and audio
-prompts are not advertised in version 0.1.0.
+through T3 tools but is not automatically backfilled into Recall's archive. Audio
+prompts remain unsupported. Image prompts are supported from version 0.1.1: native
+user image parts are saved in the durable inbox and immutable event archive. Session replay
+re-emits those image parts. Fleet sync includes the original bytes. Search and summary
+projections show MIME type, dimensions, and retrieval instructions instead of base64.
+`memory_read` verifies an archived event, then materializes private, hash-checked local files
+for `ViewImage`; these files are disposable caches. Context estimates count pixel allowances
+for user and tool images rather than treating encoded bytes as prose.

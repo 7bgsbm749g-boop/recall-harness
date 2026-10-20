@@ -99,7 +99,9 @@ def main():
     temporary.chmod(0o600)
     os.replace(temporary, manifest)
     if args.register:
-        run([sys.executable, str(Path(__file__).with_name("register-t3.py")), "--binary", str(command)])
+        # A versioned provider path lets T3 replace old ACP runtimes and their
+        # negotiated capabilities on upgrade. The shell launcher stays stable.
+        run([sys.executable, str(Path(__file__).with_name("register-t3.py")), "--binary", str(installed)])
     if args.worker:
         if os.name == "nt":
             script = (
@@ -155,7 +157,7 @@ def main():
             )
             run(["systemctl", "--user", "daemon-reload"])
             run(["systemctl", "--user", "enable", "--now", "recall-memory-sync.service"])
-    print(json.dumps({"name": "Recall", "version": version, "binary": str(installed), "provider_command": str(command), "sha256": checksum}))
+    print(json.dumps({"name": "Recall", "version": version, "binary": str(installed), "provider_command": str(installed), "sha256": checksum}))
 
 
 if __name__ == "__main__":

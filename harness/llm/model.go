@@ -29,6 +29,13 @@ type Message struct {
 	Role  Role
 	Text  string
 	Phase string
+	Media *MessageMedia `json:",omitzero"`
+}
+
+// Media is optional so existing text-only message encodings remain unchanged.
+// Images are provider-neutral image URLs, including inline base64 data URLs.
+type MessageMedia struct {
+	Images []string
 }
 
 type ToolCall struct {

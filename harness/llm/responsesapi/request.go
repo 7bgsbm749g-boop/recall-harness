@@ -102,6 +102,30 @@ func requestInput(items []llm.Item) (openaiapi.InputParam, error) {
 	return input, nil
 }
 
+func requestMessageContent(message llm.Message) ([]openaiapi.InputContent, error) {
+	var parts []openaiapi.InputContent
+	if message.Text != "" || message.Media == nil || len(message.Media.Images) == 0 {
+		var part openaiapi.InputContent
+		if err := setUnion(&part, openaiapi.InputTextContent{Text: message.Text, Type: openaiapi.InputTextContentTypeInputText}); err != nil {
+			return nil, err
+		}
+		parts = append(parts, part)
+	}
+	if message.Media != nil {
+		if message.Role != llm.RoleUser {
+			return nil, fmt.Errorf("image attachments require a user message")
+		}
+		for _, url := range message.Media.Images {
+			var part openaiapi.InputContent
+			if err := setUnion(&part, openaiapi.InputImageContentParamAutoParam{ImageUrl: &url, Type: openaiapi.InputImageContentParamAutoParamTypeInputImage}); err != nil {
+				return nil, err
+			}
+			parts = append(parts, part)
+		}
+	}
+	return parts, nil
+}
+
 func requestInputItem(source llm.Item) (openaiapi.InputItem, error) {
 	var item openaiapi.InputItem
 	if source.Type == llm.ItemMessage && source.ProviderID == "" {
@@ -110,8 +134,18 @@ func requestInputItem(source llm.Item) (openaiapi.InputItem, error) {
 			return item, fmt.Errorf("message item data must be llm.Message, got %T", source.Data)
 		}
 		var content openaiapi.EasyInputMessage_Content
-		if err := content.FromEasyInputMessageContent0(message.Text); err != nil {
-			return item, err
+		if message.Media == nil {
+			if err := content.FromEasyInputMessageContent0(message.Text); err != nil {
+				return item, err
+			}
+		} else {
+			parts, err := requestMessageContent(message)
+			if err != nil {
+				return item, err
+			}
+			if err := setUnion(&content, parts); err != nil {
+				return item, err
+			}
 		}
 		converted := openaiapi.EasyInputMessage{
 			Content: content,
@@ -146,16 +180,13 @@ func requestItem(source llm.Item) (openaiapi.Item, error) {
 			return item, fmt.Errorf("message item data must be llm.Message, got %T", source.Data)
 		}
 		if message.Role != llm.RoleAssistant {
-			var content openaiapi.InputContent
-			if err := setUnion(&content, openaiapi.InputTextContent{
-				Text: message.Text,
-				Type: openaiapi.InputTextContentTypeInputText,
-			}); err != nil {
+			content, err := requestMessageContent(message)
+			if err != nil {
 				return item, err
 			}
 			messageType := openaiapi.InputMessageTypeMessage
 			converted := openaiapi.InputMessage{
-				Content: []openaiapi.InputContent{content},
+				Content: content,
 				Role:    openaiapi.InputMessageRole(message.Role),
 				Type:    &messageType,
 			}

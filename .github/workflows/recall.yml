@@ -43,6 +43,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: go test ./recall/...
+      - run: go test ./harness/llm/... ./harness/inbox ./harness/contextbuilder ./harness/coordinator
       - run: go test ./harness/sessionstore/localfile
       - run: python -m unittest discover -s scripts -p 'test_*.py'
       - run: go build -trimpath -o dist/recall.exe ./cmd/recall

@@ -195,9 +195,17 @@ func requestUserItems(items []llm.Item, offset int, calls map[string]*requestCal
 		var blocks []anthropicapi.InputContentBlock
 		var err error
 		if item.Type == llm.ItemMessage {
-			var block anthropicapi.InputContentBlock
-			err = setUnion(&block, anthropicapi.RequestTextBlock{Type: "text", Text: item.Data.(llm.Message).Text})
-			blocks = append(blocks, block)
+			message := item.Data.(llm.Message)
+			var content []llm.ToolResultOutput
+			if message.Text != "" || message.Media == nil || len(message.Media.Images) == 0 {
+				content = append(content, llm.ToolResultOutput{Kind: llm.ToolResultText, Value: message.Text})
+			}
+			if message.Media != nil {
+				for _, url := range message.Media.Images {
+					content = append(content, llm.ToolResultOutput{Kind: llm.ToolResultImage, Value: url})
+				}
+			}
+			blocks, err = requestToolOutput(content)
 		} else {
 			result := item.Data.(llm.ToolResult)
 			call, exists := calls[result.CallID]

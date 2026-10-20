@@ -15,6 +15,7 @@ import (
 	"github.com/tiktoken-go/tokenizer"
 
 	"github.com/unreallabsai/unreal-agent/harness/llm"
+	"github.com/unreallabsai/unreal-agent/recall/media"
 )
 
 type Config struct {
@@ -59,6 +60,29 @@ func estimateText(text string) int {
 func Estimate(items []llm.Item) int {
 	n := 0
 	for _, item := range items {
+		// Pixel data is not prose. Keep the complete bytes in the archive while
+		// counting a separate vision allowance in the active context budget.
+		switch item.Type {
+		case llm.ItemMessage:
+			message := item.Data.(llm.Message)
+			if message.Media != nil {
+				for _, url := range message.Media.Images {
+					n += media.Budget(url)
+				}
+				message.Media = nil
+				item.Data = message
+			}
+		case llm.ItemToolResult:
+			result := item.Data.(llm.ToolResult)
+			result.Output = append([]llm.ToolResultOutput(nil), result.Output...)
+			for i, part := range result.Output {
+				if part.Kind == llm.ToolResultImage {
+					n += media.Budget(part.Value)
+					result.Output[i].Value = "[image pixel allowance]"
+				}
+			}
+			item.Data = result
+		}
 		data, _ := encode(item)
 		n += estimateText(string(data)) + 32
 	}
