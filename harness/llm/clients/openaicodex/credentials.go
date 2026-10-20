@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -92,7 +93,9 @@ func readAuthFile(path string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("inspect Codex auth file: %w", err)
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+	// Windows reports synthetic Unix mode bits; the user profile's ACL owns
+	// access there. Never interpret those bits as an effective chmod policy.
+	if !info.Mode().IsRegular() || runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 		return "", "", errors.New("codex auth file must be a regular file with private permissions (chmod 600)")
 	}
 	const limit = 1 << 20

@@ -1,0 +1,48 @@
+name: Recall
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test ./...
+      - run: go test -race ./recall/...
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - run: go build -trimpath -o dist/recall ./cmd/recall
+      - run: GOOS=windows GOARCH=amd64 go build -trimpath -o dist/recall.exe ./cmd/recall
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: recall-binaries
+          path: dist/recall*
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - run: go test ./recall/...
+      - run: go test ./harness/sessionstore/localfile
+      - run: python -m unittest discover -s scripts -p 'test_*.py'
+      - run: go build -trimpath -o dist/recall.exe ./cmd/recall

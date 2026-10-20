@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -38,11 +39,13 @@ func (store *Store) listSessionEntries(ctx context.Context, entries []fs.DirEntr
 		if err := validateSessionID(id); err != nil {
 			continue
 		}
-		info, err := entry.Info()
+		// Windows DirEntry.Info can return metadata cached by ReadDir. Check
+		// the path again so removed or replaced files are not listed as live.
+		info, err := os.Lstat(filepath.Join(store.directory, entry.Name()))
 		if errors.Is(err, errors.ErrUnsupported) {
 			return nil, fmt.Errorf("list session %q: %w", id, err)
 		}
-		if err != nil {
+		if err != nil || !info.Mode().IsRegular() {
 			continue
 		}
 		sessions = append(sessions, sessionstore.SessionInfo{

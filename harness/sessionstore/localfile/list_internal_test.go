@@ -1,11 +1,9 @@
 package localfile
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
-	"syscall"
 	"testing"
 
 	"github.com/unreallabsai/unreal-agent/harness/session"
@@ -80,8 +78,8 @@ func TestListSessionEntriesSkipsFilesWithStatErrors(t *testing.T) {
 	if err := os.WriteFile(directory, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := entries[0].Info(); !errors.Is(err, syscall.ENOTDIR) {
-		t.Fatalf("stat error = %v, want ENOTDIR", err)
+	if _, err := os.Lstat(store.sessionPath("session-1")); err == nil {
+		t.Fatal("stat unexpectedly succeeded through a regular-file parent")
 	}
 	listed, err := store.listSessionEntries(t.Context(), entries)
 	if err != nil || listed == nil || len(listed) != 0 {

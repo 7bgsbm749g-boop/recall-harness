@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -411,7 +413,13 @@ func publishFile(directory, target string, data []byte) (err error) {
 }
 
 func appendFile(path string, committedSize int64, data []byte) (err error) {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	flags := os.O_WRONLY | os.O_APPEND
+	if runtime.GOOS == "windows" {
+		// Windows append-only handles lack the write-data permission required
+		// by SetEndOfFile when removing an incomplete record after a crash.
+		flags = os.O_RDWR
+	}
+	file, err := os.OpenFile(path, flags, 0)
 	if err != nil {
 		return fmt.Errorf("open session log for append: %w", err)
 	}
@@ -422,6 +430,11 @@ func appendFile(path string, committedSize int64, data []byte) (err error) {
 	}()
 	if err := file.Truncate(committedSize); err != nil {
 		return fmt.Errorf("discard incomplete session record: %w", err)
+	}
+	if runtime.GOOS == "windows" {
+		if _, err := file.Seek(committedSize, io.SeekStart); err != nil {
+			return fmt.Errorf("seek to committed session boundary: %w", err)
+		}
 	}
 	if _, err := file.Write(data); err != nil {
 		return fmt.Errorf("append session record: %w", err)
@@ -461,6 +474,11 @@ func syncDirectoryFile(directory *os.File) (err error) {
 			err = errors.Join(err, fmt.Errorf("close session store directory: %w", closeErr))
 		}
 	}()
+	// Windows does not support FlushFileBuffers on a directory opened by
+	// os.Open. Session files themselves are flushed before publication.
+	if runtime.GOOS == "windows" {
+		return nil
+	}
 	if err := directory.Sync(); err != nil {
 		return fmt.Errorf("sync session store directory: %w", err)
 	}
