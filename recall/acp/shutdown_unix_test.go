@@ -21,9 +21,12 @@ import (
 // T3/Bun supplies Unix sockets for stdio. Closing a Go os.File can itself
 // wait for a blocking read, so io.Pipe tests alone do not prove shutdown.
 func TestSIGTERMStopsACPWithParentStdinSocketOpen(t *testing.T) {
-	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, fd := range fds {
+		unix.CloseOnExec(fd)
 	}
 	parent := os.NewFile(uintptr(fds[0]), "parent")
 	defer parent.Close()
